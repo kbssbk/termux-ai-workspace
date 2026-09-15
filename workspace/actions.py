@@ -69,6 +69,11 @@ def _verified_for_deploy(root):
     return True, None
 
 
+def verification_ready(root):
+    ready, _ = _verified_for_deploy(root)
+    return ready
+
+
 def _deploy(project, cwd):
     ready, reason = _verified_for_deploy(cwd)
     if not ready:
