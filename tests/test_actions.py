@@ -56,6 +56,33 @@ class ActionTests(unittest.TestCase):
             invalidate_verification(root)
             self.assertFalse(marker.exists())
 
+    @patch("workspace.actions.shutil.which", return_value="/bin/npm")
+    @patch("workspace.actions.run_command")
+    def test_build_runs_npm_build_and_requires_artifacts(self, runner, _which):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"package.json").write_text("{}")
+            project={"id":"x","repo_path":d,"actions":["build"]}
+            runner.return_value={"ok":True,"code":0}
+            result=execute_action(project,"build")
+            self.assertEqual(runner.call_args.args[0],["npm","run","build"])
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["status"],"not_ready")
+
+    @patch("workspace.actions.shutil.which", return_value="/bin/npm")
+    @patch("workspace.actions.run_command")
+    def test_test_success_writes_verified_marker(self, runner, _which):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            (root/"package.json").write_text("{}")
+            for name in ARTIFACTS: (root/name).write_text(name)
+            project={"id":"x","repo_path":d,"actions":["test"]}
+            runner.return_value={"ok":True,"code":0}
+            result=execute_action(project,"test")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["verification"],"ready")
+            self.assertTrue((root/".ai-workspace-verified.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
