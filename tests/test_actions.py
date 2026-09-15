@@ -83,6 +83,40 @@ class ActionTests(unittest.TestCase):
             self.assertEqual(result["verification"],"ready")
             self.assertTrue((root/".ai-workspace-verified.json").exists())
 
+    def test_deploy_requires_verification_marker(self):
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+            root=Path(repo)
+            for name in ARTIFACTS: (root/name).write_text(name)
+            project={"id":"x","repo_path":repo,"deploy_path":vault,"actions":["deploy"]}
+            result=execute_action(project,"deploy")
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["status"],"not_ready")
+            self.assertEqual(list(Path(vault).iterdir()),[])
+
+    def test_deploy_rejects_changed_artifact_after_verification(self):
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+            root=Path(repo)
+            for name in ARTIFACTS: (root/name).write_text(name)
+            write_verification(root)
+            (root/"main.js").write_text("changed-after-test")
+            project={"id":"x","repo_path":repo,"deploy_path":vault,"actions":["deploy"]}
+            result=execute_action(project,"deploy")
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["status"],"not_ready")
+            self.assertEqual(list(Path(vault).iterdir()),[])
+
+    def test_deploy_copies_only_verified_allowlisted_artifacts(self):
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+            root=Path(repo)
+            for name in ARTIFACTS: (root/name).write_text(name)
+            (root/"secret.txt").write_text("never deploy")
+            write_verification(root)
+            project={"id":"x","repo_path":repo,"deploy_path":vault,"actions":["deploy"]}
+            result=execute_action(project,"deploy")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["deployed"],list(ARTIFACTS))
+            self.assertEqual(sorted(p.name for p in Path(vault).iterdir()),sorted(ARTIFACTS))
+
 
 if __name__ == "__main__":
     unittest.main()
