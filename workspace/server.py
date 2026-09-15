@@ -5,13 +5,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 from .config import load_projects,get_project,public_project
 from .health import get_system_status
-from .actions import execute_action
+from .actions import execute_action,verification_ready
 from .gemma import analyze_failure
 
 ROOT=Path(__file__).resolve().parent.parent
 WEB=ROOT/"web"; CONFIG=ROOT/"config"/"projects.json"
 ACTIVITY=deque(maxlen=30)
 LAST_FAILURE={}
+
+def project_payload(project):
+    return {**public_project(project),"verified":verification_ready(Path(project["repo_path"]).expanduser())}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): pass
@@ -20,7 +23,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlparse(self.path).path
         if path=="/api/status": return self._json(get_system_status())
-        if path=="/api/projects": return self._json([public_project(p) for p in load_projects(CONFIG)])
+        if path=="/api/projects": return self._json([project_payload(p) for p in load_projects(CONFIG)])
         if path=="/api/activity": return self._json(list(ACTIVITY))
         if path=="/": return self._static("index.html")
         if path.startswith("/static/"): return self._static(path[len("/static/"):])
