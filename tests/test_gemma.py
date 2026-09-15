@@ -21,6 +21,21 @@ class GemmaTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["analysis"]["cause"], "test failed")
 
+    @patch("workspace.gemma.urlopen")
+    def test_analyze_failure_accepts_json_code_fence_from_gemma(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = (
+            b'{"choices":[{"message":{"content":"```json\\n{\\n  \\\"cause\\\": \\\"Synthetic failure\\\",\\n  \\\"action\\\": \\\"Review test setup\\\",\\n  \\\"retry\\\": false\\n}\\n```"}}]}'
+        )
+
+        result = analyze_failure("test", {"stdout": "", "stderr": "synthetic failure"})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["status"], "done")
+        self.assertEqual(result["analysis"]["cause"], "Synthetic failure")
+        self.assertEqual(result["analysis"]["action"], "Review test setup")
+        self.assertFalse(result["analysis"]["retry"])
+
     @patch("workspace.gemma.urlopen", side_effect=OSError("offline"))
     def test_gemma_failure_never_changes_pipeline_result(self, _urlopen):
         result = analyze_failure("build", {"stdout": "", "stderr": "compile error"})
