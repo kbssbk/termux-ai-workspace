@@ -19,6 +19,15 @@ def _prompt(action, result):
     )
 
 
+def _parse_analysis(content):
+    text = str(content).strip()
+    if text.startswith("```") and text.endswith("```"):
+        lines = text.splitlines()
+        if len(lines) >= 3 and lines[0].strip().lower() in {"```json", "```"} and lines[-1].strip() == "```":
+            text = "\n".join(lines[1:-1]).strip()
+    return json.loads(text)
+
+
 def analyze_failure(action, result, timeout=45):
     payload = {
         "model": MODEL,
@@ -38,7 +47,7 @@ def analyze_failure(action, result, timeout=45):
         with urlopen(request, timeout=timeout) as response:
             outer = json.loads(response.read().decode("utf-8"))
         content = outer["choices"][0]["message"]["content"]
-        analysis = json.loads(content)
+        analysis = _parse_analysis(content)
         if set(analysis) != {"cause", "action", "retry"} or not isinstance(analysis["retry"], bool):
             raise ValueError("invalid diagnostic schema")
         return {"ok": True, "status": "done", "analysis": analysis}
