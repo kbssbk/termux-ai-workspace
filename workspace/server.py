@@ -6,10 +6,12 @@ from urllib.parse import urlparse
 from .config import load_projects,get_project,public_project
 from .health import get_system_status
 from .actions import execute_action
+from .gemma import analyze_failure
 
 ROOT=Path(__file__).resolve().parent.parent
 WEB=ROOT/"web"; CONFIG=ROOT/"config"/"projects.json"
 ACTIVITY=deque(maxlen=30)
+LAST_FAILURE={}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): pass
@@ -28,7 +30,17 @@ class Handler(BaseHTTPRequestHandler):
         if len(path)==5 and path[0]=="api" and path[1]=="projects" and path[3]=="actions":
             project=get_project(load_projects(CONFIG),path[2])
             if not project: return self._json({"error":"project_not_found"},404)
-            result=execute_action(project,path[4]); ACTIVITY.appendleft({"project":project["name"],"action":path[4],"ok":bool(result.get("ok"))}); return self._json(result,200 if result.get("status")!="rejected" else 403)
+            result=execute_action(project,path[4])
+            if path[4] in {"build","test"} and not result.get("ok"):
+                LAST_FAILURE[project["id"]]={"action":path[4],"result":result}
+            ACTIVITY.appendleft({"project":project["name"],"action":path[4],"ok":bool(result.get("ok"))})
+            return self._json(result,200 if result.get("status")!="rejected" else 403)
+        if len(path)==4 and path[0]=="api" and path[1]=="projects" and path[3]=="analyze-failure":
+            project=get_project(load_projects(CONFIG),path[2])
+            if not project: return self._json({"error":"project_not_found"},404)
+            failure=LAST_FAILURE.get(project["id"])
+            if not failure: return self._json({"ok":False,"status":"not_ready","message":"No Build/Test failure is available to analyze"})
+            return self._json(analyze_failure(failure["action"],failure["result"]))
         return self._json({"error":"not_found"},404)
     def _static(self,name):
         target=(WEB/name).resolve()
