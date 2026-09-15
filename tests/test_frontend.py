@@ -25,3 +25,15 @@ class FrontendTests(unittest.TestCase):
    self.assertIn(f"{action}:'{step}'",j)
   self.assertIn('id="workflowGuide"',h);self.assertIn('id="guideOpen"',h)
   self.assertIn("workflowGuide",i);self.assertIn("pullExplain",i);self.assertIn("deployExplain",i)
+
+ def test_failed_build_or_test_offers_ai_analysis(self):
+  h=(ROOT/"web/index.html").read_text();j=(ROOT/"web/app.js").read_text();i=(ROOT/"web/i18n.js").read_text()
+  self.assertIn('id="aiAnalysis"',h)
+  self.assertIn("analyzeFailure",j)
+  self.assertIn("aiAnalyze",i)
+  self.assertIn("aiCause",i)
+  self.assertIn("aiAction",i)
+  self.assertIn("aiRetry",i)
+
+if __name__ == "__main__":
+ unittest.main()
