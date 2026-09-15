@@ -69,14 +69,18 @@ def execute_action(project, action):
         if action == "build":
             invalidate_verification(cwd)
         result = run_command(["npm", "run", action], cwd=cwd, timeout=180)
-        if action == "test" and result.get("ok"):
-            check = verify_artifacts(cwd)
-            if not check["ok"]:
-                return {**check, "action": action, "message": "Required build artifacts are missing or empty"}
-            write_verification(cwd)
-        elif action == "test":
+        if not result.get("ok"):
+            if action == "test":
+                invalidate_verification(cwd)
+            return {**result, "action": action, "status": "done"}
+        check = verify_artifacts(cwd)
+        if not check["ok"]:
             invalidate_verification(cwd)
-        return {**result, "action": action, "status": "done"}
+            return {**check, "action": action, "message": "Required build artifacts are missing or empty"}
+        if action == "test":
+            write_verification(cwd)
+            return {**result, "action": action, "status": "done", "verification": "ready", "artifacts": list(ARTIFACTS)}
+        return {**result, "action": action, "status": "done", "artifacts": list(ARTIFACTS)}
     if action == "deploy":
         return _not_ready(action, "Deploy adapter is intentionally disabled until verified artifacts are wired to the Vault")
     if action == "open":
