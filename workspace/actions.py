@@ -54,6 +54,39 @@ def invalidate_verification(root):
         pass
 
 
+def _verified_for_deploy(root):
+    root = Path(root)
+    marker = root / VERIFICATION_FILE
+    if not marker.is_file():
+        return False, "Run Test successfully before Deploy"
+    try:
+        saved = json.loads(marker.read_text()).get("artifacts")
+        current = artifact_fingerprints(root)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return False, "Verification marker or build artifacts are invalid"
+    if saved != current:
+        return False, "Build artifacts changed after Test; run Test again"
+    return True, None
+
+
+def _deploy(project, cwd):
+    ready, reason = _verified_for_deploy(cwd)
+    if not ready:
+        return _not_ready("deploy", reason)
+    target_value = project.get("deploy_path")
+    if not target_value:
+        return _not_ready("deploy", "Deploy path is not configured")
+    target = Path(target_value).expanduser()
+    if not target.is_dir():
+        return _not_ready("deploy", "Deploy path is not ready")
+    try:
+        for name in ARTIFACTS:
+            shutil.copy2(Path(cwd) / name, target / name)
+    except OSError:
+        return _not_ready("deploy", "Could not write verified artifacts to deploy path")
+    return {"ok": True, "action": "deploy", "status": "done", "deployed": list(ARTIFACTS)}
+
+
 def execute_action(project, action):
     if action not in project.get("actions", []):
         return {"ok": False, "action": action, "status": "rejected", "message": "Action is not allowed"}
@@ -82,7 +115,7 @@ def execute_action(project, action):
             return {**result, "action": action, "status": "done", "verification": "ready", "artifacts": list(ARTIFACTS)}
         return {**result, "action": action, "status": "done", "artifacts": list(ARTIFACTS)}
     if action == "deploy":
-        return _not_ready(action, "Deploy adapter is intentionally disabled until verified artifacts are wired to the Vault")
+        return _deploy(project, cwd)
     if action == "open":
         return _not_ready(action, "Obsidian deep-link target is not configured")
     return {"ok": False, "action": action, "status": "rejected", "message": "Unknown action"}
