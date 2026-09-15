@@ -4,6 +4,7 @@
     "name": "Obsidian for AI",
     "type": "obsidian-plugin",
     "repo_path": "~/obsidian-for-ai",
+    "deploy_path": "~/.obsidian-for-ai-vault/.obsidian/plugins/obsidian-for-ai",
     "actions": ["status", "pull", "build", "test", "deploy", "open"]
   }
 ]
