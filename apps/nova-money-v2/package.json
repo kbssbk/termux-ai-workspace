@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rm -rf runtime app.tar.gz && mkdir -p runtime && base64 -d app.tar.gz.b64 > app.tar.gz && tar -xzf app.tar.gz -C runtime --strip-components=1",
+    "build": "rm -rf runtime app.tar.gz app.tar.gz.b64 && mkdir -p runtime && cat chunks/part-* > app.tar.gz.b64 && base64 -d app.tar.gz.b64 > app.tar.gz && tar -xzf app.tar.gz -C runtime --strip-components=1",
     "start": "node runtime/dev-server.mjs"
   },
   "engines": {
