@@ -1,0 +1,85 @@
+    }
+
+    function issueSummaryHTML(issue, expandable=true){
+      const p=issueProgress(issue), st=issueStatus(issue), done=(issue.articles||[]).filter(a=>a.progress===100).length, total=(issue.articles||[]).length;
+      return `<article class="issueCard" id="issue-${issue.id}"><div class="issueSummary" ${expandable?`onclick="toggleIssue('${issue.id}')"`:`onclick="jumpToIssue('${issue.id}')"`}><div class="ring" style="--p:${p}"><strong>${p}%</strong></div><div><div class="issueName">${esc(issue.year)} · ${esc(issue.publication)} · ${esc(issue.label)}</div><div class="issueMeta">기사 ${done}/${total} 완성 · ${total}개 기사</div>${issue.official?'<span class="sourceBadge">✓ 공식 목차</span>':''}</div><div style="text-align:right"><span class="status ${statusClass(st)}">${statusLabel(st)}</span>${expandable?'<div><button class="chev">⌄</button></div>':''}</div></div>${expandable?`<div class="issueBody">${issueBodyHTML(issue)}</div>`:''}</article>`;
+    }
+
+    function issueBodyHTML(issue){
+      const arts=issue.articles||[];
+      const tools=`<div class="issueTools">${issue.sourceUrl?`<button class="btn btnGhost tiny sourceLink" onclick="event.stopPropagation();openOfficialLink('${esc(issue.sourceUrl)}')">JW.ORG 참조 ↗</button>`:''}<button class="btn btnGhost tiny" onclick="event.stopPropagation();openArticleModal('${issue.id}')">+ 기사</button><button class="btn btnGhost tiny" onclick="event.stopPropagation();openQuoteFor('${issue.id}')">+ 문장</button><button class="btn btnDanger tiny" onclick="event.stopPropagation();deleteIssue('${issue.id}')">호수 삭제</button></div>`;
+      if(!arts.length)return tools+`<div class="empty"><strong>기사가 없습니다.</strong>이 호수의 기사 제목을 추가하세요.</div>`;
+      return tools+arts.map((a,idx)=>articleHTML(issue,a,idx)).join('');
+    }
+
+    function articleHTML(issue,a,idx){
+      const p=CORE.clampProgress(a.progress), cls=a.status==='진행중'?'article inprogress':'article';
+      return `<div class="${cls}" onclick="event.stopPropagation()"><div class="articleTop"><div class="articleIndex">${idx+1}</div><div class="articleTitle">${esc(a.title)}</div><div class="articlePct">${p}%</div></div><div class="statusGroup">${['미완','진행중','완성'].map(s=>`<button class="statusBtn ${a.status===s?'active':''}" data-status="${s}" onclick="setArticleStatus('${issue.id}','${a.id}','${s}')">${s}</button>`).join('')}</div><div class="sliderBox"><div class="sliderHead"><span>읽은 정도</span><strong>${p}%</strong></div><input type="range" min="1" max="99" step="1" value="${Math.min(99,Math.max(1,p||25))}" oninput="previewSlider(this)" onchange="setArticleProgress('${issue.id}','${a.id}',this.value)"></div><div class="articleActions"><button class="quoteAdd" onclick="openQuoteFor('${issue.id}','${a.id}')">+ 문장 메모</button>${a.sourceUrl?`<button class="sourceLink" onclick="openOfficialLink('${esc(a.sourceUrl)}')">출처</button>`:''}<button onclick="deleteArticle('${issue.id}','${a.id}')">기사 삭제</button></div></div>`;
+    }
+
+    function renderProgress(){
+      const yearIssues=state.issues.filter(i=>Number(i.year)===Number(currentYear));
+      $('issueCountText').textContent=`${currentYear}년 · ${yearIssues.length}개 호수`;
+      const filtered=yearIssues.filter(i=>currentIssueFilter==='전체'||issueStatus(i)===currentIssueFilter).sort((a,b)=>String(b.officialCode||b.label).localeCompare(String(a.officialCode||a.label),'ko',{numeric:true}));
+      $('issueList').innerHTML=filtered.length?filtered.map(i=>issueSummaryHTML(i,true)).join(''):`<div class="empty"><strong>${currentIssueFilter==='전체'?'등록한 호수가 없습니다.':currentIssueFilter+' 상태의 호수가 없습니다.'}</strong>${currentIssueFilter==='전체'?'먼저 호수를 등록하고 기사 진행률을 기록하세요.':''}${currentIssueFilter==='전체'?'<br><button class="btn btnPrimary" onclick="openModal(\'issueModal\')">+ 호수 추가</button>':''}</div>`;
+    }
+
+    function renderSearch(){
+      const q=$('searchInput').value.trim().toLowerCase();
+      const matchesRange=p=>{if(searchRange==='all')return true;const [a,b]=searchRange.split('-').map(Number);return p>=a&&p<=b};
+      const articleResults=[];
+      state.issues.forEach(issue=>(issue.articles||[]).forEach(article=>{const p=CORE.clampProgress(article.progress);const hay=`${article.title} ${issue.publication} ${issue.label} ${issue.year}`.toLowerCase();if((!q||hay.includes(q))&&(searchStatus==='전체'||article.status===searchStatus)&&matchesRange(p))articleResults.push({issue,article})}));
+      const quoteResults=(state.quotes||[]).filter(qt=>{const issue=state.issues.find(i=>i.id===qt.issueId),article=issue?.articles?.find(a=>a.id===qt.articleId);const hay=`${qt.sentence} ${qt.note||''} ${(qt.tags||[]).join(' ')} ${article?.title||''}`.toLowerCase();return !q||hay.includes(q)});
+      $('searchCount').textContent=`기사 ${articleResults.length}건 · 문장 ${quoteResults.length}건`;
+      let html='';
+      if(articleResults.length){html+=articleResults.slice(0,120).map(({issue,article})=>`<div class="result" onclick="jumpToIssue('${issue.id}')"><div class="resultTitle">${esc(article.title)} · ${article.progress}%</div><div class="resultMeta">${esc(issue.year)} · ${esc(issue.publication)} · ${esc(issue.label)} · ${article.status}</div></div>`).join('')}
+      if(quoteResults.length){html+=quoteResults.slice(0,120).map(qt=>{const issue=state.issues.find(i=>i.id===qt.issueId),article=issue?.articles?.find(a=>a.id===qt.articleId);return `<div class="result"><div class="resultTitle">${esc(article?.title||'기사 미지정')}</div><div class="resultMeta">${(qt.tags||[]).map(t=>'#'+esc(t)).join(' ')}${qt.note?' · '+esc(qt.note):''}</div><div class="resultQuote">${esc(qt.sentence)}</div></div>`}).join('')}
+      $('searchResults').innerHTML=html||`<div class="empty"><strong>일치하는 항목이 없습니다.</strong>검색어나 필터를 바꿔보세요.</div>`;
+    }
+
+    function render(){renderHome();renderProgress();renderSearch()}
+    window.toggleIssue=id=>{const el=$('issue-'+id);if(el)el.classList.toggle('open')};
+    window.jumpToIssue=id=>{go('progress');setTimeout(()=>{const el=$('issue-'+id);if(el){el.classList.add('open');el.scrollIntoView({behavior:'smooth',block:'start'})}},60)};
+    window.previewSlider=el=>{const box=el.closest('.sliderBox');box.querySelector('strong').textContent=`${el.value}%`;el.closest('.article').querySelector('.articlePct').textContent=`${el.value}%`};
+
+    window.setArticleStatus=(issueId,articleId,status)=>{const issue=state.issues.find(i=>i.id===issueId),a=issue?.articles?.find(x=>x.id===articleId);if(!a)return;a.status=status;a.progress=CORE.nextProgressForStatus(status,a.progress);a.updatedAt=issue.updatedAt=Date.now();save();render();requestAnimationFrame(()=>{$('issue-'+issueId)?.classList.add('open')});toast(`${status} · ${a.progress}%`)};
+    window.setArticleProgress=(issueId,articleId,value)=>{const issue=state.issues.find(i=>i.id===issueId),a=issue?.articles?.find(x=>x.id===articleId);if(!a)return;a.status='진행중';a.progress=Math.min(99,Math.max(1,CORE.clampProgress(value)));a.updatedAt=issue.updatedAt=Date.now();save();render();requestAnimationFrame(()=>{$('issue-'+issueId)?.classList.add('open')});};
+    window.deleteArticle=(issueId,articleId)=>{if(!confirm('이 기사를 삭제할까요?'))return;const issue=state.issues.find(i=>i.id===issueId);issue.articles=issue.articles.filter(a=>a.id!==articleId);state.quotes=state.quotes.filter(q=>q.articleId!==articleId);issue.updatedAt=Date.now();save();render();requestAnimationFrame(()=>{$('issue-'+issueId)?.classList.add('open')})};
+    window.deleteIssue=id=>{if(!confirm('이 호수와 연결된 문장 메모를 모두 삭제할까요?'))return;state.issues=state.issues.filter(i=>i.id!==id);state.quotes=state.quotes.filter(q=>q.issueId!==id);save();render();toast('호수를 삭제했습니다.')};
+
+    function openModal(id){$(id).classList.add('show')}; window.openModal=openModal;
+    function closeModal(id){$(id).classList.remove('show')};
+    document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+    document.querySelectorAll('.modalWrap').forEach(w=>w.onclick=e=>{if(e.target===w)w.classList.remove('show')});
+
+    $('addIssueBtn').onclick=()=>openModal('issueModal'); $('quickIssue').onclick=()=>{hideMenu();openModal('issueModal')};
+    $('saveIssue').onclick=()=>{const year=Number($('issueYear').value)||nowYear,label=$('issueLabel').value.trim(),publication=$('issuePublication').value,titles=$('issueArticles').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!label){toast('호수를 입력하세요.');return}const issue={id:uid('issue'),year,publication,label,articles:titles.map(t=>({id:uid('art'),title:t,status:'미완',progress:0,updatedAt:Date.now()})),createdAt:Date.now(),updatedAt:Date.now()};state.issues.push(issue);save();$('issueLabel').value='';$('issueArticles').value='';closeModal('issueModal');go('progress');setTimeout(()=>{$('issue-'+issue.id)?.classList.add('open')},40);toast('호수를 등록했습니다.')};
+    window.openArticleModal=id=>{activeIssueForArticle=id;$('articleTitleInput').value='';openModal('articleModal');setTimeout(()=>$('articleTitleInput').focus(),80)};
+    $('saveArticle').onclick=()=>{const title=$('articleTitleInput').value.trim(),issue=state.issues.find(i=>i.id===activeIssueForArticle);if(!title||!issue)return toast('기사 제목을 입력하세요.');issue.articles.push({id:uid('art'),title,status:'미완',progress:0,updatedAt:Date.now()});issue.updatedAt=Date.now();save();closeModal('articleModal');render();requestAnimationFrame(()=>{$('issue-'+issue.id)?.classList.add('open')});toast('기사를 추가했습니다.')};
+
+    function fillQuoteSelects(preIssue,preArticle){$('quoteIssueSelect').innerHTML=state.issues.map(i=>`<option value="${i.id}">${esc(i.year)} · ${esc(i.publication)} · ${esc(i.label)}</option>`).join('');if(preIssue)$('quoteIssueSelect').value=preIssue;updateQuoteArticles(preArticle)}
+    function updateQuoteArticles(preArticle){const issue=state.issues.find(i=>i.id===$('quoteIssueSelect').value);$('quoteArticleSelect').innerHTML=(issue?.articles||[]).map(a=>`<option value="${a.id}">${esc(a.title)}</option>`).join('');if(preArticle)$('quoteArticleSelect').value=preArticle}
+    $('quoteIssueSelect').onchange=()=>updateQuoteArticles();
+    window.openQuoteFor=(issueId,articleId)=>{if(!state.issues.length){toast('먼저 호수를 등록하세요.');return}selectedQuoteTags=[];document.querySelectorAll('#quoteTags .chip').forEach(x=>x.classList.remove('active'));fillQuoteSelects(issueId,articleId);$('quoteSentence').value='';$('quoteNote').value='';openModal('quoteModal')};
+    $('quickQuote').onclick=()=>{hideMenu();openQuoteFor()};
+    document.querySelectorAll('#quoteTags .chip').forEach(b=>b.onclick=()=>{const t=b.dataset.tag;if(selectedQuoteTags.includes(t))selectedQuoteTags=selectedQuoteTags.filter(x=>x!==t);else selectedQuoteTags.push(t);b.classList.toggle('active')});
+    $('saveQuote').onclick=()=>{const sentence=$('quoteSentence').value.trim(),issueId=$('quoteIssueSelect').value,articleId=$('quoteArticleSelect').value;if(!sentence)return toast('문장을 입력하세요.');state.quotes.push({id:uid('quote'),issueId,articleId,sentence,note:$('quoteNote').value.trim(),tags:[...selectedQuoteTags],createdAt:Date.now()});save();closeModal('quoteModal');render();toast('문장 메모를 저장했습니다.')};
+
+    $('yearSelect').onchange=()=>{currentYear=Number($('yearSelect').value)||2026;renderProgress()};
+    $('syncOfficialBtn').onclick=()=>syncOfficial(false);
+    document.querySelectorAll('#issueFilterChips .chip').forEach(b=>b.onclick=()=>{currentIssueFilter=b.dataset.filter;document.querySelectorAll('#issueFilterChips .chip').forEach(x=>x.classList.toggle('active',x===b));renderProgress()});
+    document.querySelectorAll('#searchStatusChips .chip').forEach(b=>b.onclick=()=>{searchStatus=b.dataset.statusFilter;document.querySelectorAll('#searchStatusChips .chip').forEach(x=>x.classList.toggle('active',x===b));renderSearch()});
+    document.querySelectorAll('#searchRangeChips .chip').forEach(b=>b.onclick=()=>{searchRange=b.dataset.range;document.querySelectorAll('#searchRangeChips .chip').forEach(x=>x.classList.toggle('active',x===b));renderSearch()});
+    $('searchInput').oninput=renderSearch;$('clearSearch').onclick=()=>{$('searchInput').value='';renderSearch()};
+
+    const menu=$('menuPanel');function hideMenu(){menu.classList.remove('show')}$('menuBtn').onclick=()=>menu.classList.toggle('show');document.addEventListener('click',e=>{if(!menu.contains(e.target)&&e.target!==$('menuBtn'))hideMenu()});
+    $('exportBtn').onclick=()=>{hideMenu();const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`문장라이브러리_백업_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+    $('importFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const parsed=JSON.parse(await f.text());if(!parsed||!Array.isArray(parsed.issues))throw new Error();state=parsed;state.quotes||=[];save();render();toast('백업을 복원했습니다.')}catch{alert('올바른 백업 JSON 파일이 아닙니다.')}e.target.value='';hideMenu()};
+    $('clearAll').onclick=()=>{hideMenu();if(confirm('모든 호수, 기사 진행률, 문장 메모를 삭제할까요?')){state={version:1,issues:[],quotes:[],officialSync:{version:1,source:'JW.ORG',done:[],failed:[],lastRun:null}};save();render();renderSyncBox();toast('초기화했습니다.')}};
+
+    load();ensureSyncState();populateYearSelect();render();renderSyncBox();
+    // 첫 설치에서는 공식 자료를 자동으로 불러옵니다. 실패한 항목은 다음 실행이나 메뉴의 동기화 버튼으로 이어서 재시도할 수 있습니다.
+    if(!state.officialSync.done.length && navigator.onLine!==false)setTimeout(()=>syncOfficial(false),900);
+  </script>
+</body>
+</html>
