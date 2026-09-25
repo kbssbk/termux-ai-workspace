@@ -1,0 +1,90 @@
+      const ss=ensureSyncState(),done=new Set(ss.done||[]),ok=OFFICIAL_CANDIDATES.filter(c=>done.has(c.code)).length,total=OFFICIAL_CANDIDATES.length,pct=Math.round(ok/total*100),officialIssues=state.issues.filter(i=>i.official).length,articleCount=state.issues.filter(i=>i.official).reduce((n,i)=>n+(i.articles||[]).filter(a=>a.official).length,0),failed=(ss.failed||[]).length;
+      const actions=syncRunning
+        ? '<button class="btn btnGhost tiny" onclick="stopOfficialSync()">동기화 중지</button>'
+        : `<button class="btn btnPrimary tiny" onclick="syncOfficial(false,false)">공식 자료 동기화</button>${failed?'<button class="btn btnGhost tiny" onclick="syncOfficial(false,true)">실패 항목만 재시도</button>':''}`;
+      const bridge=(window.Android&&typeof Android.fetchText==='function')?'APK 네이티브 통신':'웹 통신';
+      $('officialSyncBox').innerHTML=`<div class="syncTop"><div><div class="syncTitle">${syncRunning?'<span class="syncSpinner"></span> ':''}JW.ORG 공식 목차 · 2026~2001</div><div class="syncMeta">${officialIssues}개 호수 · 기사 제목 ${articleCount}개 저장 · ${ok}/${total} 확인${failed?` · 실패 ${failed}`:''} · ${bridge}</div></div><strong>${pct}%</strong></div><div class="syncBar"><i style="width:${pct}%"></i></div><div class="syncActions">${actions}<span class="mutedNote">기사 본문은 저장하지 않고 제목·호수·공식 참조 링크만 저장합니다.</span></div>`;
+    }
+    function cleanImportedTitles(titles){
+      const bad=new Set(['표지','목차','저작권','다운로드 옵션','JW.ORG','여호와의 증인','한국어','공유']);
+      const out=[],seen=new Set();
+      for(let t of titles||[]){t=OFFICIAL.cleanText(t);if(!t||t.length<2||t.length>220||bad.has(t))continue;if(/^파수대[—\-]/.test(t)||/^파수대\s*\(연구용\)/.test(t)||/^\d{4}년\s*\d+월/.test(t)||/^제?\d+면$/.test(t))continue;const k=OFFICIAL.normalizeTitle(t);if(!seen.has(k)){seen.add(k);out.push(t)}}
+      return out;
+    }
+    function parseBridgeResult(raw,label){
+      let data;try{data=JSON.parse(String(raw||''))}catch{throw new Error(label+' 응답 해석 실패')}
+      if(!data.ok)throw new Error(label+' '+(data.status||'')+' '+(data.error||'요청 실패'));
+      return data;
+    }
+    async function officialText(url){
+      if(window.Android&&typeof Android.fetchText==='function')return parseBridgeResult(Android.fetchText(url),'공식 사이트').body||'';
+      const r=await fetch(url,{cache:'no-store',redirect:'follow'});if(!r.ok)throw new Error('공식 사이트 '+r.status);return r.text();
+    }
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    async function fetchOfficialIssue(candidate){
+      let lastError=null;
+      for(const url of OFFICIAL.issueUrlCandidates(candidate)){
+        try{
+          const html=await officialText(url);
+          if(!/파수대(?:—|-|\s)*(?:연구용|\(연구용\))/.test(html))throw new Error('연구용 파수대 페이지 아님');
+          const articles=OFFICIAL.extractArticles(html,url).filter(x=>cleanImportedTitles([x.title]).length);
+          if(articles.length)return {articles,sourceUrl:url,method:'jw.org'};
+          throw new Error('기사 제목 없음');
+        }catch(e){lastError=e}
+      }
+      throw lastError||new Error('JW.ORG 공식 목차 불러오기 실패');
+    }
+    async function fetchOfficialIssueWithRetry(candidate){
+      let last;
+      for(let attempt=0;attempt<3;attempt++){
+        try{return await fetchOfficialIssue(candidate)}catch(e){last=e;if(attempt<2)await wait(attempt===0?700:1800)}
+      }
+      throw last||new Error('공식 자료 불러오기 실패');
+    }
+    async function syncOneOfficial(candidate,force=false){
+      const ss=ensureSyncState();if(!force&&ss.done.includes(candidate.code)){const old=state.issues.find(i=>i.officialCode===candidate.code);if(old&&(old.articles||[]).length)return {ok:true,skip:true}}
+      try{
+        const data=await fetchOfficialIssueWithRetry(candidate);
+        OFFICIAL.mergeOfficialIssue(state,{code:candidate.code,year:candidate.year,label:OFFICIAL.issueLabel(candidate.code),sourceUrl:data.sourceUrl,articles:data.articles},uid);
+        if(!ss.done.includes(candidate.code))ss.done.push(candidate.code);ss.failed=ss.failed.filter(x=>x.code!==candidate.code);return {ok:true,count:data.articles.length};
+      }catch(e){
+        ss.failed=ss.failed.filter(x=>x.code!==candidate.code);ss.failed.push({code:candidate.code,error:String(e.message||e),at:Date.now()});return {ok:false,error:e};
+      }
+    }
+    async function syncOfficial(force=false,failedOnly=false){
+      if(syncRunning)return;syncRunning=true;syncStop=false;hideMenu();renderSyncBox();toast(failedOnly?'실패 항목을 다시 확인합니다.':'JW.ORG 공식 목차 동기화를 시작합니다.');
+      const ss=ensureSyncState();const failedCodes=new Set((ss.failed||[]).map(x=>x.code));
+      const queue=OFFICIAL_CANDIDATES.filter(c=>failedOnly?failedCodes.has(c.code):(force||!ss.done.includes(c.code)||!(state.issues.find(i=>i.officialCode===c.code)?.articles||[]).length));let cursor=0,completed=0;
+      async function worker(){while(!syncStop){const i=cursor++;if(i>=queue.length)return;await syncOneOfficial(queue[i],force);completed++;ss.lastRun=Date.now();save();if(completed%2===0){renderSyncBox();if(Number(queue[i].year)===Number(currentYear))renderProgress()}}}
+      const workers=Array.from({length:2},()=>worker());await Promise.all(workers);ss.lastRun=Date.now();save();syncRunning=false;render();renderSyncBox();toast(syncStop?'동기화를 중지했습니다. 나중에 이어서 할 수 있습니다.':((ss.failed||[]).length?`동기화 완료 · 실패 ${(ss.failed||[]).length}개`:'공식 자료 동기화가 완료되었습니다.'));
+    }
+    window.syncOfficial=syncOfficial;window.stopOfficialSync=()=>{syncStop=true};
+
+    function go(screen){
+      document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active')); $(screen+'Screen').classList.add('active');
+      document.querySelectorAll('.navBtn').forEach(x=>x.classList.toggle('active',x.dataset.screen===screen));
+      window.scrollTo({top:0,behavior:'smooth'}); render();
+    }
+    document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>go(b.dataset.screen));
+    document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+
+    function currentReading(){
+      const items=allArticles();
+      let found=items.filter(x=>x.article.status==='진행중').sort((a,b)=>(b.article.updatedAt||0)-(a.article.updatedAt||0))[0];
+      if(found)return found;
+      found=items.find(x=>CORE.clampProgress(x.article.progress)<100);return found||null;
+    }
+
+    function renderHome(){
+      const cur=currentReading();
+      if(!cur){
+        $('continueCard').innerHTML=`<div class="continueTop"><span class="continueBadge">START</span><div class="continueTitle">첫 호수를 등록해 보세요.</div></div><div class="continueMeta">호수와 기사 목록을 넣으면 진행률이 자동 계산됩니다.</div><div class="ctaRow"><button class="btn btnPrimary" onclick="openModal('issueModal')">+ 호수 추가</button></div>`;
+      } else {
+        const p=CORE.clampProgress(cur.article.progress), st=cur.article.status;
+        $('continueCard').innerHTML=`<div class="continueTop"><span class="continueBadge">${st==='진행중'?'CONTINUE':'NEXT'}</span><div class="continueTitle">${esc(cur.article.title)}</div></div><div class="continueMeta">${esc(cur.issue.year)} · ${esc(cur.issue.publication)} · ${esc(cur.issue.label)}</div><div class="progressLine"><i style="width:${p}%"></i></div><div class="progressRow"><span>${st}</span><strong class="percent">${p}%</strong></div><div class="ctaRow"><button class="btn btnPrimary" onclick="jumpToIssue('${cur.issue.id}')">이어 읽기</button><button class="btn btnGhost" onclick="openQuoteFor('${cur.issue.id}','${cur.article.id}')">문장 메모</button></div>`;
+      }
+      const articles=allArticles();
+      const done=articles.filter(x=>x.article.progress===100).length, prog=articles.filter(x=>x.article.status==='진행중').length;
+      $('homeStats').innerHTML=`<div class="stat"><span>전체 진행률</span><b>${overallProgress()}%</b></div><div class="stat"><span>완성 기사</span><b>${done}</b></div><div class="stat"><span>진행중</span><b>${prog}</b></div>`;
+      const recent=[...state.issues].sort((a,b)=>((b.updatedAt||0)-(a.updatedAt||0))||String(b.officialCode||'').localeCompare(String(a.officialCode||''))).slice(0,3);
+      $('recentIssues').innerHTML=recent.length?recent.map(i=>issueSummaryHTML(i,false)).join(''):`<div class="empty"><strong>아직 등록한 호수가 없습니다.</strong>먼저 읽고 있는 호수를 추가하세요.<br><button class="btn btnPrimary" onclick="openModal('issueModal')">+ 첫 호수 등록</button></div>`;
