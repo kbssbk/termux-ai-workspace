@@ -21,7 +21,10 @@ jobs:
 
       - name: JavaScript unit tests
         working-directory: sentence-library-android
-        run: node tests/official-core.test.js
+        run: |
+          node tests/official-core.test.js
+          node tests/progress-core.test.js
+          node tests/ui-regression.test.js
 
       - name: Live JW.ORG smoke test
         working-directory: sentence-library-android
