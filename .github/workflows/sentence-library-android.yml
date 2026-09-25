@@ -1,0 +1,53 @@
+name: Sentence Library Android APK
+
+on:
+  push:
+    branches: [sentence-library-sync-fix]
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct WebView index
+        run: |
+          cat sentence-library-android/app/src/main/assets-parts/index-*.part > sentence-library-android/app/src/main/assets/index.html
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: JavaScript unit tests
+        working-directory: sentence-library-android
+        run: node tests/official-core.test.js
+
+      - name: Live JW.ORG smoke test
+        working-directory: sentence-library-android
+        run: node tests/live-official.mjs
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Host allowlist test
+        working-directory: sentence-library-android
+        run: |
+          mkdir -p /tmp/hostpolicy-test
+          javac -d /tmp/hostpolicy-test app/src/main/java/com/beomsoo/sentenceapp/OfficialHostPolicy.java tests/java/OfficialHostPolicyTest.java
+          java -cp /tmp/hostpolicy-test com.beomsoo.sentenceapp.OfficialHostPolicyTest
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build debug APK
+        working-directory: sentence-library-android
+        run: gradle :app:assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sentence-library-sync-fix-apk
+          path: sentence-library-android/app/build/outputs/apk/debug/app-debug.apk
