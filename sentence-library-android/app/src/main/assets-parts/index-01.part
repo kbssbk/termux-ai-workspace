@@ -1,0 +1,90 @@
+        <div class="sectionHead"><div><h2>검색 결과</h2><p id="searchCount">0건</p></div></div>
+        <div id="searchResults"></div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottomNav">
+    <button class="navBtn active" data-screen="home"><span>⌂</span><span>홈</span></button>
+    <button class="navBtn" data-screen="progress"><span>＋</span><span>진행</span></button>
+    <button class="navBtn" data-screen="search"><span>⌕</span><span>검색</span></button>
+  </nav>
+
+  <div id="menuPanel" class="menuPanel">
+    <button id="quickIssue">＋ 새 호수 등록</button>
+    <button id="quickQuote">＋ 문장 메모 추가</button>
+    <button id="syncOfficialBtn">↻ JW.ORG 공식 자료 동기화</button>
+    <button id="exportBtn">JSON 백업</button>
+    <label>JSON 복원<input id="importFile" type="file" accept="application/json,.json"></label>
+    <button id="clearAll" style="color:#ff9cac">모든 데이터 초기화</button>
+  </div>
+
+  <div id="issueModal" class="modalWrap"><div class="modal">
+    <div class="modalHead"><h3>새 호수 등록</h3><button class="close" data-close="issueModal">×</button></div>
+    <div class="two"><div class="field"><label>연도</label><input id="issueYear" type="number" min="1900" max="2100"></div><div class="field"><label>호수</label><input id="issueLabel" placeholder="예: 8월호 / 제3호"></div></div>
+    <div class="field"><label>출판물</label><select id="issuePublication"><option>파수대—연구용</option><option>파수대 배부용</option><option>깨어라</option><option>기타</option></select></div>
+    <div class="field"><label>기사 제목 · 한 줄에 하나씩</label><textarea id="issueArticles" placeholder="기사 1 제목\n기사 2 제목\n기사 3 제목"></textarea><div class="mutedNote">실제 목차를 보고 기사 제목을 그대로 입력하면 됩니다. 나중에 기사 추가/삭제도 가능합니다.</div></div>
+    <div class="modalActions"><button class="btn btnGhost" data-close="issueModal">취소</button><button class="btn btnPrimary" id="saveIssue">저장</button></div>
+  </div></div>
+
+  <div id="articleModal" class="modalWrap"><div class="modal">
+    <div class="modalHead"><h3>기사 추가</h3><button class="close" data-close="articleModal">×</button></div>
+    <div class="field"><label>기사 제목</label><input id="articleTitleInput" placeholder="기사 제목"></div>
+    <div class="modalActions"><button class="btn btnGhost" data-close="articleModal">취소</button><button class="btn btnPrimary" id="saveArticle">추가</button></div>
+  </div></div>
+
+  <div id="quoteModal" class="modalWrap"><div class="modal">
+    <div class="modalHead"><h3>문장 메모 추가</h3><button class="close" data-close="quoteModal">×</button></div>
+    <div class="field"><label>호수</label><select id="quoteIssueSelect"></select></div>
+    <div class="field"><label>기사</label><select id="quoteArticleSelect"></select></div>
+    <div class="field"><label>기억할 문장</label><textarea id="quoteSentence" placeholder="읽다가 다시 찾고 싶은 문장"></textarea></div>
+    <div class="field"><label>태그 · 여러 개 선택</label><div class="chips" id="quoteTags"><button class="chip" data-tag="여호와">#여호와</button><button class="chip" data-tag="예수">#예수</button><button class="chip" data-tag="성령">#성령</button><button class="chip" data-tag="관계">#관계</button><button class="chip" data-tag="도움">#도움</button><button class="chip" data-tag="발전">#발전</button></div></div>
+    <div class="field"><label>내 메모 · 선택</label><textarea id="quoteNote" placeholder="왜 기억하고 싶은지, 적용점 등"></textarea></div>
+    <div class="modalActions"><button class="btn btnGhost" data-close="quoteModal">취소</button><button class="btn btnPrimary" id="saveQuote">문장 저장</button></div>
+  </div></div>
+
+  <div id="toast" class="toast">저장했습니다.</div>
+
+  <script src="progress-core.js"></script>
+  <script src="official_core.js"></script>
+  <script>
+    const CORE = window.ProgressCore;
+    const STORAGE_KEY = 'sentence_library_android_local_v1';
+    const OFFICIAL = window.OFFICIAL_CORE;
+    const TAGS = ['여호와','예수','성령','관계','도움','발전'];
+    let state = {version:1, issues:[], quotes:[]};
+    let currentIssueFilter='전체', searchStatus='전체', searchRange='all', activeIssueForArticle=null;
+    let currentYear=2026, syncRunning=false, syncStop=false;
+    let selectedQuoteTags=[];
+
+    const $ = id => document.getElementById(id);
+    const uid = p => `${p}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const esc = (s='') => String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const nowYear = new Date().getFullYear();
+    $('issueYear').value = nowYear;
+
+    function load(){
+      try{const raw=localStorage.getItem(STORAGE_KEY); if(raw){const parsed=JSON.parse(raw); if(parsed && Array.isArray(parsed.issues)){state=parsed; state.quotes ||= [];}}}catch(e){console.warn(e)}
+    }
+    function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}
+    function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),1800)}
+    window.openOfficialLink=url=>{try{if(window.Android&&typeof Android.openExternal==='function'){Android.openExternal(url);return}}catch(e){}location.href=url};
+    function issueProgress(issue){return CORE.deriveIssueProgress(issue.articles||[])}
+    function issueStatus(issue){return CORE.deriveIssueStatus(issue.articles||[])}
+    function statusClass(status){return status==='완성'?'done':status==='진행중'?'progress':'unfinished'}
+    function statusLabel(status){return status}
+    function allArticles(){return state.issues.flatMap(issue=>(issue.articles||[]).map(article=>({issue,article})))}
+    function overallProgress(){const all=allArticles();return all.length?Math.round(all.reduce((s,x)=>s+CORE.clampProgress(x.article.progress),0)/all.length):0}
+
+    const OFFICIAL_CANDIDATES=OFFICIAL.generateIssueCandidates(2026,2001);
+    function ensureSyncState(){
+      state.officialSync ||= {version:1,source:'JW.ORG',done:[],failed:[],lastRun:null};
+      state.officialSync.done ||= []; state.officialSync.failed ||= [];
+      return state.officialSync;
+    }
+    function populateYearSelect(){
+      const ys=[];for(let y=2026;y>=2001;y--)ys.push(y);
+      $('yearSelect').innerHTML=ys.map(y=>`<option value="${y}">${y}년</option>`).join('');
+      $('yearSelect').value=String(currentYear);
+    }
+    function renderSyncBox(){
