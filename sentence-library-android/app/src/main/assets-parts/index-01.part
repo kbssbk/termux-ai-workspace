@@ -1,11 +1,40 @@
         <div class="sectionHead"><div><h2>검색 결과</h2><p id="searchCount">0건</p></div></div>
         <div id="searchResults"></div>
       </section>
+
+      <section id="dashboardScreen" class="screen">
+        <div class="eyebrow">READING DASHBOARD</div>
+        <h2 class="title">전체 대시보드</h2>
+        <p class="sub">Google Drive의 「파수대 깨어라」 대시보드처럼 전체 기사, 완료, 진행 중, 미완과 연도별 진행률을 한 화면에서 확인합니다.</p>
+        <div id="dashboardOverview" class="dashboardOverview"></div>
+        <div class="sectionHead"><div><h2>이어 읽기</h2><p>가장 최근에 진행한 기사로 바로 이동합니다.</p></div></div>
+        <div id="dashboardContinue"></div>
+        <div class="sectionHead"><div><h2>연도별 진행률</h2><p>연도를 누르면 해당 연도의 호수 목록으로 이동합니다.</p></div></div>
+        <div id="dashboardYearList" class="yearDashboard"></div>
+      </section>
     </main>
   </div>
 
+  <style>
+    .bottomNav{grid-template-columns:repeat(4,1fr)}
+    .issueSummary.tapTarget{cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;position:relative}
+    .issueSummary.tapTarget:active{background:rgba(79,156,255,.055)}
+    .tapHint{margin-top:5px;color:#6fa8f4;font-size:10px;font-weight:800}
+    input[type=range]{height:36px;touch-action:pan-x}
+    input[type=range]::-webkit-slider-thumb{width:24px;height:24px}
+    .dashboardOverview{margin-top:20px;display:grid;gap:12px}
+    .dashHero{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;padding:20px;border:1px solid rgba(79,156,255,.34);border-radius:24px;background:linear-gradient(140deg,rgba(20,48,81,.82),rgba(8,22,39,.92));box-shadow:var(--shadow)}
+    .dashHero small{display:block;color:#8fa5c2;font-size:11px;font-weight:800;margin-bottom:5px}.dashHero h3{margin:0;font-size:30px;letter-spacing:-1px}.dashHero p{margin:7px 0 0;color:#8fa5c2;font-size:11px;line-height:1.55}
+    .dashRing{--p:0;width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--blue) calc(var(--p)*1%),rgba(255,255,255,.07) 0);position:relative;box-shadow:0 0 24px rgba(79,156,255,.12)}.dashRing:after{content:"";position:absolute;inset:7px;background:#0a1829;border-radius:50%}.dashRing strong{z-index:1;font-size:16px}
+    .dashStats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.dashStat{padding:13px 10px;border:1px solid var(--line);border-radius:16px;background:rgba(9,23,40,.72);min-width:0}.dashStat span{display:block;color:#8196af;font-size:10px;white-space:nowrap}.dashStat b{display:block;font-size:18px;margin-top:5px;color:#eaf3ff}
+    .dashContinue{padding:16px;border:1px solid var(--line);border-radius:20px;background:rgba(10,25,43,.74)}.dashContinueTitle{font-size:14px;font-weight:900;line-height:1.45}.dashContinueMeta{font-size:11px;color:var(--muted);margin-top:5px}.dashContinue .ctaRow{margin-top:11px}
+    .yearDashboard{display:grid;gap:9px}.yearDashRow{display:grid;grid-template-columns:54px 1fr 46px;gap:11px;align-items:center;padding:12px 13px;border:1px solid var(--line);border-radius:16px;background:rgba(9,23,40,.66);cursor:pointer;touch-action:manipulation}.yearDashRow:active{border-color:rgba(79,156,255,.55);background:rgba(79,156,255,.07)}.yearDashYear{font-size:13px;font-weight:900}.yearDashBar{height:7px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden}.yearDashBar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--blue2),var(--cyan))}.yearDashMeta{font-size:10px;color:#8095af;margin-top:6px}.yearDashPct{text-align:right;font-size:12px;font-weight:900;color:#cfe3ff}
+    @media(max-width:430px){.dashStats{grid-template-columns:repeat(2,1fr)}.navBtn{height:56px}.navBtn span:first-child{font-size:19px}}
+  </style>
+
   <nav class="bottomNav">
     <button class="navBtn active" data-screen="home"><span>⌂</span><span>홈</span></button>
+    <button class="navBtn" data-screen="dashboard"><span>▦</span><span>대시보드</span></button>
     <button class="navBtn" data-screen="progress"><span>＋</span><span>진행</span></button>
     <button class="navBtn" data-screen="search"><span>⌕</span><span>검색</span></button>
   </nav>
@@ -75,6 +104,20 @@
     function statusLabel(status){return status}
     function allArticles(){return state.issues.flatMap(issue=>(issue.articles||[]).map(article=>({issue,article})))}
     function overallProgress(){const all=allArticles();return all.length?Math.round(all.reduce((s,x)=>s+CORE.clampProgress(x.article.progress),0)/all.length):0}
+    function dashboardEta(){
+      const all=allArticles(),remainingUnits=all.reduce((sum,x)=>sum+(100-CORE.clampProgress(x.article.progress))/100,0),days=Math.ceil(remainingUnits);
+      const d=new Date();d.setDate(d.getDate()+days);
+      return {days,date:`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`};
+    }
+    function renderDashboard(){
+      const m=CORE.dashboardMetrics(state.issues),eta=dashboardEta();
+      $('dashboardOverview').innerHTML=`<div class="dashHero"><div><small>전체 기사 기준</small><h3>${m.overallProgress}% 진행</h3><p>남은 분량 ${eta.days}기사분 · 1일 1기사분 기준 예상 ${eta.date}</p></div><div class="dashRing" style="--p:${m.overallProgress}"><strong>${m.overallProgress}%</strong></div></div><div class="dashStats"><div class="dashStat"><span>전체 기사</span><b>${m.total}</b></div><div class="dashStat"><span>완성</span><b>${m.done}</b></div><div class="dashStat"><span>진행 중</span><b>${m.inProgress}</b></div><div class="dashStat"><span>미완</span><b>${m.unfinished}</b></div></div>`;
+      const cur=currentReading();
+      $('dashboardContinue').innerHTML=cur?`<div class="dashContinue"><div class="dashContinueTitle">${esc(cur.article.title)}</div><div class="dashContinueMeta">${esc(cur.issue.year)} · ${esc(cur.issue.publication)} · ${esc(cur.issue.label)} · ${cur.article.progress}%</div><div class="ctaRow"><button class="btn btnPrimary tiny" onclick="jumpToIssue('${cur.issue.id}')">기사별 진행률 열기</button><button class="btn btnGhost tiny" onclick="openQuoteFor('${cur.issue.id}','${cur.article.id}')">문장 메모</button></div></div>`:`<div class="empty"><strong>현재 이어 읽을 기사가 없습니다.</strong>호수를 등록하거나 공식 자료를 동기화하세요.</div>`;
+      const mapped=new Map(CORE.yearMetrics(state.issues).map(x=>[x.year,x])),years=[];for(let y=2026;y>=2001;y--)years.push(mapped.get(y)||{year:y,total:0,done:0,inProgress:0,unfinished:0,progress:0});
+      $('dashboardYearList').innerHTML=years.map(y=>`<div class="yearDashRow" role="button" tabindex="0" onclick="openDashboardYear(${y.year})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDashboardYear(${y.year})}"><div class="yearDashYear">${y.year}</div><div><div class="yearDashBar"><i style="width:${y.progress}%"></i></div><div class="yearDashMeta">완성 ${y.done}/${y.total}${y.inProgress?` · 진행 ${y.inProgress}`:''}</div></div><div class="yearDashPct">${y.progress}%</div></div>`).join('');
+    }
+    window.openDashboardYear=year=>{currentYear=Number(year);$('yearSelect').value=String(currentYear);go('progress');setTimeout(()=>renderProgress(),50)};
 
     const OFFICIAL_CANDIDATES=OFFICIAL.generateIssueCandidates(2026,2001);
     function ensureSyncState(){
