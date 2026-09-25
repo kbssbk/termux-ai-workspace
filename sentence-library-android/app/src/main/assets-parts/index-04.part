@@ -1,0 +1,14 @@
+
+<script>
+(function(){
+  issueSummaryHTML=function(issue,expandable=true){
+    const p=issueProgress(issue),st=issueStatus(issue),done=(issue.articles||[]).filter(a=>a.progress===100).length,total=(issue.articles||[]).length;
+    const action=expandable?`toggleIssue('${issue.id}')`:`jumpToIssue('${issue.id}')`;
+    const aria=expandable?'기사별 진행률 열기':'호수 진행 보기';
+    return `<article class="issueCard" id="issue-${issue.id}"><div class="issueSummary tapTarget" role="button" tabindex="0" aria-label="${aria}" onclick="${action}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${action}}"><div class="ring" style="--p:${p}"><strong>${p}%</strong></div><div><div class="issueName">${esc(issue.year)} · ${esc(issue.publication)} · ${esc(issue.label)}</div><div class="issueMeta">기사 ${done}/${total} 완성 · ${total}개 기사</div>${issue.official?'<span class="sourceBadge">✓ 공식 목차</span>':''}${expandable?'<div class="tapHint">탭해서 기사별 % 조정</div>':''}</div><div style="text-align:right"><span class="status ${statusClass(st)}">${statusLabel(st)}</span>${expandable?'<div><span class="chev" aria-hidden="true">⌄</span></div>':''}</div></div>${expandable?`<div class="issueBody">${issueBodyHTML(issue)}</div>`:''}</article>`;
+  };
+
+  render=function(){renderHome();renderDashboard();renderProgress();renderSearch()};
+  render();
+})();
+</script>
