@@ -17,4 +17,16 @@ class SettingsRepositoryTest {
         assertEquals("custom", repo.statuses().single { it.name == "잠시 보류" }.id)
         assertEquals("tag-x", repo.tags().single { it.name == "핵심" }.id)
     }
+
+    @Test fun reorder_changes_only_sort_order_and_keeps_ids() {
+        val repo = InMemorySettingsRepository()
+        repo.upsertStatus(StatusDefinition("custom","보류",10,true,false,true,3))
+        repo.moveStatus("custom", 0)
+        assertEquals("custom", repo.statuses().first().id)
+        assertEquals(setOf("status-unfinished","status-progress","status-done","custom"), repo.statuses().map { it.id }.toSet())
+
+        repo.upsertTag(Tag("tag-x","핵심",9))
+        repo.moveTag("tag-x",0)
+        assertEquals("tag-x",repo.tags().first().id)
+    }
 }
