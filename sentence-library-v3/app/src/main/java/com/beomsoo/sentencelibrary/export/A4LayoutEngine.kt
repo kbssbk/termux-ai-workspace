@@ -5,7 +5,7 @@ class A4LayoutEngine {
         val pages = mutableListOf<MutableList<LayoutLine>>(mutableListOf())
         var y = 58f
         fun newPage() {
-            pages += mutableListOf()
+            pages.add(mutableListOf())
             y = 58f
             pages.last() += LayoutLine("${article.publication} · ${article.issue} · ${article.title}", y, true)
             y += 22f
