@@ -49,6 +49,6 @@ object JwOrgParser {
         return ParsedOfficialIssue(publication,articles)
     }
 
-    fun normalize(value:String)=value.normalize().replace(Regex("[“”‘’'\"\\s]"),"").lowercase()
-    private fun String.normalize()=java.text.Normalizer.normalize(this,java.text.Normalizer.Form.NFKC)
+    fun normalize(value:String)=value.nfkc().replace(Regex("[“”‘’'\"\\s]"),"").lowercase()
+    private fun String.nfkc()=java.text.Normalizer.normalize(this,java.text.Normalizer.Form.NFKC)
 }
