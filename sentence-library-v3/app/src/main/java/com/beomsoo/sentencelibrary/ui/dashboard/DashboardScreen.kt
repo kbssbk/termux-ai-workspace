@@ -28,7 +28,7 @@ fun DashboardScreen(repository:ReadingRepository,onYear:(Int)->Unit) {
             }}
         }
         item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) { Metric("전체",summaries.size,Modifier.weight(1f));Metric("완성",model.completedCount,Modifier.weight(1f));Metric("진행중",model.inProgressCount,Modifier.weight(1f));Metric("미완",model.unfinishedCount,Modifier.weight(1f)) } }
-        item { Card(shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("하루 1기사 기준",style=MaterialTheme.typography.labelLarge); Text("남은 $remaining개 · 예상 완료 $estimate",style=MaterialTheme.typography.bodyLarge) } } }
+        item { Card(shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("하루 1기사 기준",style=MaterialTheme.typography.labelLarge); Text("남은 ${remaining}개 · 예상 완료 $estimate",style=MaterialTheme.typography.bodyLarge) } } }
         item { Text("연도별 진행률",style=MaterialTheme.typography.titleLarge) }
         items(model.yearRows,key={it.year}) { row ->
             Card(shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth().clickable{onYear(row.year)}) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
