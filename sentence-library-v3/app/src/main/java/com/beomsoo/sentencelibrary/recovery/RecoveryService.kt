@@ -25,7 +25,7 @@ class RecoveryService(private val store: RecoveryStore) {
     fun createSnapshot(reason:String): SnapshotRecord {
         val record = SnapshotRecord("snapshot-${UUID.randomUUID()}", reason, store.current)
         store.snapshots.add(0, record)
-        while(store.snapshots.size > 10) store.snapshots.removeLast()
+        while(store.snapshots.size > 10) store.snapshots.removeAt(store.snapshots.lastIndex)
         return record
     }
 
