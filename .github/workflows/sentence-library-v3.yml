@@ -1,0 +1,34 @@
+name: Sentence Library V3 Android
+
+on:
+  push:
+    branches: [sentence-library-v3-redesign]
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Unit tests
+        run: gradle -p sentence-library-v3 :app:testDebugUnitTest --no-daemon
+      - name: Build debug and release
+        run: gradle -p sentence-library-v3 :app:assembleDebug :app:assembleRelease --no-daemon
+      - name: Verify APK identity
+        run: |
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          APP_ID=$(apkanalyzer manifest application-id sentence-library-v3/app/build/outputs/apk/debug/app-debug.apk)
+          test "$APP_ID" = "com.beomsoo.sentencelibrary"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sentence-library-v3-apks
+          path: |
+            sentence-library-v3/app/build/outputs/apk/debug/app-debug.apk
+            sentence-library-v3/app/build/outputs/apk/release/app-release-unsigned.apk
