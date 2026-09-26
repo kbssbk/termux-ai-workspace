@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/sentence-library-backup-v3.schema.json",
+  "title": "Sentence Library V3 Backup",
+  "type": "object",
+  "required": ["schemaVersion", "publications", "issues", "articles", "quotes"],
+  "properties": {
+    "schemaVersion": {"const": 3},
+    "exportedAt": {"type": "integer"},
+    "publications": {"type": "array", "items": {"type": "object", "required": ["id","name"]}},
+    "issues": {"type": "array", "items": {"type": "object", "required": ["id","year","publication","label"]}},
+    "articles": {"type": "array", "items": {"type": "object", "required": ["id","issueId","title","status","progress"]}},
+    "quotes": {"type": "array", "items": {"type": "object", "required": ["id","issueId","articleId","sentence"]}},
+    "tags": {"type": "array"},
+    "statuses": {"type": "array"},
+    "customFields": {"type": "array"},
+    "customValues": {"type": "array"},
+    "preferences": {"type": "object", "additionalProperties": {"type":"string"}}
+  },
+  "additionalProperties": true
+}
