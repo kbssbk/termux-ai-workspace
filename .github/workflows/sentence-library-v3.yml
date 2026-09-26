@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -23,8 +23,9 @@ jobs:
         run: gradle -p sentence-library-v3 :app:assembleDebug :app:assembleRelease --no-daemon
       - name: Verify APK identity
         run: |
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          APP_ID=$(apkanalyzer manifest application-id sentence-library-v3/app/build/outputs/apk/debug/app-debug.apk)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -1)
+          test -n "$AAPT"
+          APP_ID=$($AAPT dump badging sentence-library-v3/app/build/outputs/apk/debug/app-debug.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
           test "$APP_ID" = "com.beomsoo.sentencelibrary"
       - uses: actions/upload-artifact@v4
         with:
